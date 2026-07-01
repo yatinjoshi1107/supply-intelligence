@@ -16,6 +16,7 @@ import numpy as np
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
+from streamlit_autorefresh import st_autorefresh
 
 # ── make src/ importable ──────────────────────────────────────────────────────
 BASE = Path(__file__).parent
@@ -40,6 +41,10 @@ APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzUW2s9LrwPBZ_8KB8rxP
 # ═══════════════════════════════════════════════════════════════════════════════
 st.set_page_config(page_title="Supply Intelligence", page_icon="📊",
                    layout="wide", initial_sidebar_state="expanded")
+
+# Auto-refresh every 5 minutes (300,000 ms) — re-runs the script which
+# re-fetches data since cache TTL also expires at 300s.
+st_autorefresh(interval=300_000, limit=None, key="auto_refresh")
 
 st.markdown("""
 <style>

@@ -6,3 +6,4 @@ PyYAML>=6.0
 matplotlib>=3.7
 streamlit>=1.35
 plotly>=5.20
+streamlit-autorefresh>=1.0.1
