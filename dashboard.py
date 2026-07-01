@@ -208,18 +208,14 @@ def _clean(df: pd.DataFrame, cfg: dict, month: str) -> pd.DataFrame:
         df["sub_disposition"] = df["sub_disposition"].fillna("Never Dialed")
 
     # RM assign — handle both datetime NaT and string blanks from CSV
-    # Use rm_name as primary RM-assignment signal — more reliable than date parsing from CSV.
-    # A lead is "unassigned" only if rm_name is genuinely blank.
-    if "rm_name" in df.columns:
-        blank_rm = df["rm_name"].astype(str).str.strip().isin(["", "nan", "None", "null", "NaN", "na"])
-        df["rm_unassigned_flag"] = blank_rm.astype(int)
-    elif "rm_assign_date" in df.columns:
-        is_blank = df["rm_assign_date"].isna()
-        if df["rm_assign_date"].dtype == object:
-            is_blank = is_blank | df["rm_assign_date"].astype(str).str.strip().isin(["", "nan", "NaT", "None", "null"])
+    # Check rm_assign_date for nulls BEFORE datetime conversion (Google Sheets sends
+    # JS-formatted date strings that pd.to_datetime coerces to NaT even for valid dates).
+    if "rm_assign_date" in df.columns:
+        raw = df["rm_assign_date"].astype(str).str.strip()
+        is_blank = df["rm_assign_date"].isna() | raw.isin(["", "nan", "NaT", "None", "null", "na"])
         df["rm_unassigned_flag"] = is_blank.astype(int)
     else:
-        df["rm_unassigned_flag"] = 0  # assume all assigned if column missing
+        df["rm_unassigned_flag"] = 0
 
     for c in ["source", "rm_name", "lead_stage", "allocation_type"]:
         if c in df.columns:
@@ -355,8 +351,10 @@ reg_docs    = float(ex["Reg | Docs Complete %"])
 conn_pct    = float(ex["Connected %"])
 
 with st.sidebar:
+    from datetime import datetime, timezone, timedelta
+    ist = datetime.now(timezone(timedelta(hours=5, minutes=30)))
     st.success(f"✅  {total_leads:,} leads loaded")
-    st.caption(f"Last refresh: {time.strftime('%H:%M:%S')}")
+    st.caption(f"Last refresh: {ist.strftime('%d %b %H:%M')} IST")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
