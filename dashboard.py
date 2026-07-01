@@ -198,6 +198,16 @@ def _clean(df: pd.DataFrame, cfg: dict, month: str) -> pd.DataFrame:
     if "lead_id" in df.columns:
         df = df.drop_duplicates(subset=["lead_id"])
 
+    # Set rm_unassigned_flag BEFORE pd.to_datetime — Google Sheets sends JS date strings
+    # like "Thu Jun 18 2026 18:46:00 GMT+0530" which pd.to_datetime coerces to NaT,
+    # making every row look blank if we check after conversion.
+    if "rm_assign_date" in df.columns:
+        raw = df["rm_assign_date"].astype(str).str.strip()
+        is_blank = df["rm_assign_date"].isna() | raw.isin(["", "nan", "NaT", "None", "null", "na"])
+        df["rm_unassigned_flag"] = is_blank.astype(int)
+    else:
+        df["rm_unassigned_flag"] = 0
+
     for c in ["talk_time", "auto_dials", "manual_dials"]:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
@@ -211,16 +221,6 @@ def _clean(df: pd.DataFrame, cfg: dict, month: str) -> pd.DataFrame:
         df["disposition"] = df["disposition"].fillna("Never Dialed")
     if "sub_disposition" in df.columns:
         df["sub_disposition"] = df["sub_disposition"].fillna("Never Dialed")
-
-    # RM assign — handle both datetime NaT and string blanks from CSV
-    # Check rm_assign_date for nulls BEFORE datetime conversion (Google Sheets sends
-    # JS-formatted date strings that pd.to_datetime coerces to NaT even for valid dates).
-    if "rm_assign_date" in df.columns:
-        raw = df["rm_assign_date"].astype(str).str.strip()
-        is_blank = df["rm_assign_date"].isna() | raw.isin(["", "nan", "NaT", "None", "null", "na"])
-        df["rm_unassigned_flag"] = is_blank.astype(int)
-    else:
-        df["rm_unassigned_flag"] = 0
 
     for c in ["source", "rm_name", "lead_stage", "allocation_type"]:
         if c in df.columns:
