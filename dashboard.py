@@ -32,7 +32,7 @@ from src import (features, descriptive, lead_quality, predictive,
 # ═══════════════════════════════════════════════════════════════════════════════
 # Paste your Apps Script web app URL here so ALL users see the same dashboard.
 # If left empty, the sidebar will prompt for it.
-APPS_SCRIPT_URL = ""
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzUW2s9LrwPBZ_8KB8rxPyzHQhpkB8FCO-8jMWgzUP39enwIKSqYmbVb0qLXBLZrl8Aeg/exec"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -208,13 +208,18 @@ def _clean(df: pd.DataFrame, cfg: dict, month: str) -> pd.DataFrame:
         df["sub_disposition"] = df["sub_disposition"].fillna("Never Dialed")
 
     # RM assign — handle both datetime NaT and string blanks from CSV
-    if "rm_assign_date" in df.columns:
+    # Use rm_name as primary RM-assignment signal — more reliable than date parsing from CSV.
+    # A lead is "unassigned" only if rm_name is genuinely blank.
+    if "rm_name" in df.columns:
+        blank_rm = df["rm_name"].astype(str).str.strip().isin(["", "nan", "None", "null", "NaN", "na"])
+        df["rm_unassigned_flag"] = blank_rm.astype(int)
+    elif "rm_assign_date" in df.columns:
         is_blank = df["rm_assign_date"].isna()
         if df["rm_assign_date"].dtype == object:
             is_blank = is_blank | df["rm_assign_date"].astype(str).str.strip().isin(["", "nan", "NaT", "None", "null"])
         df["rm_unassigned_flag"] = is_blank.astype(int)
     else:
-        df["rm_unassigned_flag"] = 1
+        df["rm_unassigned_flag"] = 0  # assume all assigned if column missing
 
     for c in ["source", "rm_name", "lead_stage", "allocation_type"]:
         if c in df.columns:
