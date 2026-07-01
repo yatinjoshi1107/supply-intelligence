@@ -1,0 +1,132 @@
+# ============================================================================
+# SUPPLY INTELLIGENCE & PREDICTIVE ONBOARDING MODEL
+# Central configuration. Everything the pipeline needs to know about the data,
+# the business, and the models lives here so new months plug in with zero
+# code changes -- only this file (and the raw file path) may need editing.
+# ============================================================================
+
+project:
+  name: "Supply Intelligence & Predictive Onboarding Model"
+  version: "1.0.0"
+  analysis_month: "Jun"          # <-- update per month (must match Month column values)
+
+paths:
+  raw_file: "data/raw/supply_data.xlsx"
+  raw_sheet: "Base"
+  processed_dir: "data/processed"
+  tables_dir: "outputs/tables"
+  figures_dir: "outputs/figures"
+  reports_dir: "outputs/reports"
+
+# ----------------------------------------------------------------------------
+# COLUMN MAPPING
+# Left = canonical name used everywhere in code. Right = actual column in file.
+# When a future month renames a column, fix it HERE only.
+# ----------------------------------------------------------------------------
+columns:
+  lead_id: "Lead ID"
+  source: "Source"
+  campaign: "Source Campaign"
+  month: "Month"
+  created_date: "Created Date"
+  rm_assign_date: "RM Assign Date"
+  lead_stage: "Lead Stage"
+  disposition: "Dialer Disposition"
+  sub_disposition: "Dialer Sub Disposition"
+  talk_time: "Total Talk Time on Lead (secs)"
+  auto_dials: "Jun Auto dials"
+  manual_dials: "Jun Manual Dials"
+  rm_name: "RM Name"
+  rm_code: "RM Employee Code"
+  allocation_type: "Allocation Type"
+
+# Document columns (the six-pack). Value "Uploaded" == present.
+document_columns:
+  - "Aadhaar Front"
+  - "Aadhaar Back"
+  - "PAN"
+  - "Education Detail"
+  - "Bank Detail"
+  - "Photo"
+document_uploaded_value: "Uploaded"
+
+# Columns to drop (constant / non-informative for the analysis month).
+drop_columns:
+  - "May Auto dials"
+  - "May Manual dials"
+
+# ----------------------------------------------------------------------------
+# CANONICAL BUSINESS SEMANTICS
+# ----------------------------------------------------------------------------
+lead_stages:
+  registered: "Registered"            # == successfully onboarded (the outcome)
+  ordered:                            # funnel order, earliest -> latest
+    - "Fresh"
+    - "Follow Up"
+    - "Incomplete Lead"
+    - "Document Invalid"
+    - "Rejected"
+    - "Closed"
+    - "Registration Requested"
+    - "Registered"
+
+connected_values: ["Connected", "Converted"]   # dispositions that count as "reached"
+
+# Map raw sub-dispositions -> analytic buckets (Module 9 root-cause + KPIs).
+# Any sub-disposition not listed falls into "other".
+sub_disposition_map:
+  dnp:              ["DNP"]
+  not_interested:   ["Not Interested", "ni_insurance", "ni_id"]
+  busy:             ["Busy"]
+  follow_up:        ["Call Back", "int_warm_followup", "int_hot_followup", "follow_up"]
+  not_eligible:     ["conn_not_elig_qual", "conn_not_elig_age", "Not Eligible - Age", "Not Eligible - Qualification", "working_in_id"]
+  unreachable:      ["switched_off", "Switched Off / Out of Service", "out_of_svc", "Wrong Number"]
+  language_barrier: ["Language Barrier"]
+  docs_progress:    ["docs_collected", "Docs Done", "int_no_docs"]
+  already_registered: ["Already Registered with ID", "already_registered"]
+  b2c:              ["conn_b2c", "B2C Customer"]
+  call_issue:       ["Hang Up", "Call Drop", "Partner Not Available"]
+
+# ----------------------------------------------------------------------------
+# BUSINESS TARGETS
+# ----------------------------------------------------------------------------
+business:
+  monthly_registration_target: 4000
+  even_allocation_tolerance: 0.20   # RM lead share within +/-20% of equal = "balanced"
+
+# ----------------------------------------------------------------------------
+# MODEL CONFIG
+# ----------------------------------------------------------------------------
+model:
+  # Two-stage framing (approved): P(register) = P(complete docs) * P(register | complete)
+  stage_a_target: "completed_docs"        # engineered: all 6 docs uploaded
+  # Early-lifecycle features ONLY (no document columns -> no leakage).
+  features_categorical:
+    - "source"
+    - "campaign"
+    - "allocation_type"
+    - "disposition"
+    - "sub_bucket"
+  features_numeric:
+    - "talk_time"
+    - "auto_dials"
+    - "manual_dials"
+    - "is_connected"
+  cv_folds: 5
+  random_state: 42
+  # Prefer the simpler model unless a more complex one beats it by this AUC margin.
+  gbm_auc_improvement_threshold: 0.02
+  # Risk bands on final P(register).
+  risk_bands:
+    high: 0.40      # p >= 0.40
+    medium: 0.15    # 0.15 <= p < 0.40 ; below = low
+
+# Lead Quality Score scaling (Module 2): 0-100.
+lead_quality:
+  score_min: 0
+  score_max: 100
+
+# Forecast (Module 5).
+forecast:
+  bootstrap_iterations: 2000
+  confidence_level: 0.90
